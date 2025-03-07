@@ -103,7 +103,7 @@ void loop() {
         lcd.print(voltage, 2);
         lcd.print(" I:");
         lcd.print(current, 2);
-        lcd.print("A  ");
+        lcd.print("mA  ");
     }
 
     //Mulai tracking matahari dari jam 9 pagi - 3 sore
@@ -129,8 +129,6 @@ void loop() {
     if (currentMillis == 21600) {
         moveMotor(returnSteps, true);
     }
-
-    delay(500); // Untuk menghindari flickering pada LCD
 }
 
 // ----------------------------------------------
@@ -188,18 +186,17 @@ void logData(DateTime now, float voltage, float current) {
 // ----------------------------------------------
 float getAverageCurrent() {
     int mA = ACS.mA_DC();
-    float A = mA / 1000;
 
     // Serial.println(A);
 
-    return A;
+    return mA;
 }
 
 float getAverageVoltage() {
   int adc = analogRead(VOLTAGE_SENSOR);
   // Serial.print("adc");
   // Serial.println(adc);
-  float voltage = adc * (5.0 / 1023) * 4.5; // 2 adalah nilai pembagi tegangan dengan rumus (R1 + R2) / R2
+  float voltage = adc * (5.0 / 1023) * 2; // 2 adalah nilai pembagi tegangan dengan rumus (R1 + R2) / R2
   // Serial.print("voltage");
   // Serial.println(voltage);
   return voltage;
