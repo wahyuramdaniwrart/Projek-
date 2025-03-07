@@ -1,3 +1,4 @@
+
 /* ----------------------------------------------
 🔹 SOLAR TRACKER OTOMATIS metode BLIND SETTING dengan Arduino 🔹
 ----------------------------------------------
@@ -15,6 +16,7 @@
 #include <SPI.h>                // Untuk SD Card
 #include <SD.h>                 // Untuk SD Card
 #include <RTClib.h>             // Untuk RTC DS3231
+#include <ACS712.h>
 
 //Definisi pin
 #define PUL 4             // Pin PUL+ (Pulse) dari TB6600
@@ -29,6 +31,9 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 RTC_DS3231 rtc;
 File dataFile;
 
+//konfigurasi sensor acs712
+ACS712  ACS(CURRENT_SENSOR, 5.0, 1023, 66); //ACS712 30A uses  66 mV per A
+
 //Pengaturan pergerakan stepper
 const int trackingInterval = 840; // Interval tracking: 14 menit (840 detik)
 const int totalDuration = 21600;  // Durasi tracking: 9 AM - 3 PM (6 jam = 21600 detik)
@@ -36,6 +41,9 @@ const int stepPerMove = 3;        // Pergerakan 3 langkah per tracking
 const int trackingSteps = 50;     // Total langkah dari timur ke barat
 const int returnSteps = 25;       // Langkah untuk kembali ke posisi awal
 unsigned long trackingMillis = 0; // Waktu terakhir tracking
+
+const unsigned long interval = 1000; // Interval 1 detik
+unsigned long previousMillis = 0;
 
 void setup() {
     Serial.begin(9600);
@@ -66,6 +74,9 @@ void setup() {
         lcd.print("SD ERROR");
         while (1);
     }
+
+    //inisalisasi sensor acs712
+    ACS.autoMidPoint();
 }
 
 void loop() {
@@ -77,19 +88,23 @@ void loop() {
     float voltage = getAverageVoltage();
     float current = getAverageCurrent();
 
-    //Tampilkan waktu & sensor ke LCD
-    lcd.setCursor(0, 0);
-    lcd.print("Time: ");
-    lcd.print(now.hour()); lcd.print(":");
-    lcd.print(now.minute()); lcd.print(":");
-    lcd.print(now.second());
+    if (currentMillis - previousMillis >= interval) {
+        previousMillis = currentMillis;
+        
+        //Tampilkan waktu & sensor ke LCD
+        lcd.setCursor(0, 0);
+        lcd.print("Time: ");
+        lcd.print(now.hour()); lcd.print(":");
+        lcd.print(now.minute()); lcd.print(":");
+        lcd.print(now.second());
 
-    lcd.setCursor(0, 1);
-    lcd.print("V:");
-    lcd.print(voltage, 2);
-    lcd.print(" I:");
-    lcd.print(current, 2);
-    lcd.print("A  ");
+        lcd.setCursor(0, 1);
+        lcd.print("V:");
+        lcd.print(voltage, 2);
+        lcd.print(" I:");
+        lcd.print(current, 2);
+        lcd.print("A  ");
+    }
 
     //Mulai tracking matahari dari jam 9 pagi - 3 sore
     if (currentMillis >= 32400 && currentMillis <= 54000) {
@@ -171,20 +186,19 @@ void logData(DateTime now, float voltage, float current) {
 // ----------------------------------------------
 //FUNGSI UNTUK MEMBACA SENSOR TEGANGAN & ARUS
 // ----------------------------------------------
-float getAverageVoltage() {
-    float sum = 0;
-    for (int i = 0; i < 10; i++) {
-        sum += analogRead(VOLTAGE_SENSOR) * (5.0 / 1023.0) * 10;
-        delay(10);
+float getAverageCurrent() {
+    int mA = ACS.mA_DC();
+    float A = mA / 1000;
+
+    if (A < 0.00) {
+      A = 0.00;
     }
-    return sum / 10.0;
+
+    return A;
 }
 
-float getAverageCurrent() {
-    float sum = 0;
-    for (int i = 0; i < 10; i++) {
-        sum += analogRead(CURRENT_SENSOR) * (5.0 / 1023.0);
-        delay(10);
-    }
-    return sum / 10.0;
+float getAverageVoltage() {
+  int adc = analogRead(VOLTAGE_SENSOR);
+  float voltage = ((adc / 1023) * 5.0) * 2; // 2 adalah nilai pembagi tegangan dengan rumus (R1 + R1) / R2
+  return voltage;
 }
