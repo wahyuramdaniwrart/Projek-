@@ -88,7 +88,7 @@ void loop() {
     float voltage = getAverageVoltage();
     float current = getAverageCurrent();
 
-    if (currentMillis - previousMillis >= interval) {
+    if (currentMillis - previousMillis >= 100) {
         previousMillis = currentMillis;
         
         //Tampilkan waktu & sensor ke LCD
@@ -190,15 +190,17 @@ float getAverageCurrent() {
     int mA = ACS.mA_DC();
     float A = mA / 1000;
 
-    if (A < 0.00) {
-      A = 0.00;
-    }
+    // Serial.println(A);
 
     return A;
 }
 
 float getAverageVoltage() {
   int adc = analogRead(VOLTAGE_SENSOR);
-  float voltage = ((adc / 1023) * 5.0) * 2; // 2 adalah nilai pembagi tegangan dengan rumus (R1 + R1) / R2
+  // Serial.print("adc");
+  // Serial.println(adc);
+  float voltage = adc * (5.0 / 1023) * 4.5; // 2 adalah nilai pembagi tegangan dengan rumus (R1 + R2) / R2
+  // Serial.print("voltage");
+  // Serial.println(voltage);
   return voltage;
 }
