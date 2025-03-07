@@ -34,15 +34,11 @@ File dataFile;
 //konfigurasi sensor acs712
 ACS712  ACS(CURRENT_SENSOR, 5.0, 1023, 66); //ACS712 30A uses  66 mV per A
 
-//Pengaturan pergerakan stepper
-const int trackingInterval = 840; // Interval tracking: 14 menit (840 detik)
-const int totalDuration = 21600;  // Durasi tracking: 9 AM - 3 PM (6 jam = 21600 detik)
-const int stepPerMove = 3;        // Pergerakan 3 langkah per tracking
-const int trackingSteps = 50;     // Total langkah dari timur ke barat
-const int returnSteps = 25;       // Langkah untuk kembali ke posisi awal
-unsigned long trackingMillis = 0; // Waktu terakhir tracking
+//inisialisai motor
+const int stepInterval = 2; // Waktu antar langkah dalam milidetik
+bool stepState = LOW; // Menyimpan status sinyal STEP
 
-const unsigned long interval = 1000; // Interval 1 detik
+//inisialisasi waktu
 unsigned long previousMillis = 0;
 
 void setup() {
@@ -77,6 +73,14 @@ void setup() {
 
     //inisalisasi sensor acs712
     ACS.autoMidPoint();
+
+    //inisialisasi motor
+    pinMode(STEP_PIN, OUTPUT);
+    pinMode(DIR_PIN, OUTPUT);
+    pinMode(ENABLE_PIN, OUTPUT);
+
+    motorEnable(true);   // Aktifkan driver
+    setDirection(true);  // Atur arah CW
 }
 
 void loop() {
@@ -105,60 +109,41 @@ void loop() {
         lcd.print(current, 2);
         lcd.print("mA  ");
     }
+    
+    // if (currentMillis - previousMillis >= 100) {
+    //     previousMillis = currentMillis;
 
-    //Mulai tracking matahari dari jam 9 pagi - 3 sore
-    if (currentMillis >= 32400 && currentMillis <= 54000) {
-        if (currentMillis - trackingMillis >= trackingInterval) {
-            trackingMillis = currentMillis;
-            trackSun();
-            logData(now, voltage, current); // Simpan data ke SD Card hanya saat tracking
-        }
-    }
+    // }
 
-    //Panel dikunci di barat dari jam 3 sore - 6 sore
-    if (currentMillis >= 54000 && currentMillis < 64800) {
-        digitalWrite(ENA, LOW);
-    }
+    motor(); // Jalankan pergerakan motor
 
-    //Jam 6 sore: Panel tegak lurus ke atas
-    if (currentMillis == 64800) {
-        moveMotor(returnSteps, true);
-    }
-
-    //Jam 6 pagi: Panel kembali ke posisi awal (timur)
-    if (currentMillis == 21600) {
-        moveMotor(returnSteps, true);
-    }
 }
 
 // ----------------------------------------------
 // FUNGSI UNTUK MENGGERAKKAN MOTOR STEPPER
 // ----------------------------------------------
 
-//Fungsi untuk tracking matahari
-void trackSun() {
-    digitalWrite(ENA, LOW);  // Aktifkan motor
-    digitalWrite(DIR, LOW); // Gerak ke kanan (barat)
-    for (int i = 0; i < stepPerMove; i++) {
-        stepMotor();
-    }
+// Fungsi untuk mengaktifkan atau menonaktifkan motor driver
+void motorEnable(bool enable) {
+  digitalWrite(ENABLE_PIN, enable ? LOW : HIGH); // LOW = Aktif, HIGH = Nonaktif
 }
 
-//Fungsi untuk menggerakkan motor sejumlah langkah tertentu
-void moveMotor(int steps, bool clockwise) {
-    digitalWrite(ENA, LOW);  
-    digitalWrite(DIR, clockwise ? HIGH : LOW);
-    for (int i = 0; i < steps; i++) {
-        stepMotor();
-    }
+// Fungsi untuk mengatur arah putaran
+void setDirection(bool clockwise) {
+  digitalWrite(DIR_PIN, clockwise ? HIGH : LOW);
 }
 
-//Fungsi untuk satu langkah motor
-void stepMotor() {
-    digitalWrite(PUL, HIGH);
-    delayMicroseconds(500);
-    digitalWrite(PUL, LOW);
-    delayMicroseconds(500);
+void motor() {
+  unsigned long currentTime = millis();
+
+  if (currentTime - previousStepTime >= stepInterval) {
+    previousStepTime = currentTime;
+    
+    // Kirim satu pulsa STEP (HIGH lalu LOW)
+    digitalWrite(STEP_PIN, HIGH);
+    delayMicroseconds(5);  // Pulsa minimum agar terbaca TB6600
+    digitalWrite(STEP_PIN, LOW);
+  }
 }
 
 // ----------------------------------------------
