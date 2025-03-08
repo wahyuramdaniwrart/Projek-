@@ -10,6 +10,7 @@ const int cycleTime = 100;           // Waktu satu siklus (ms)
 const unsigned long delayBetweenCycles = 5000; // 7 menit dalam milidetik
 
 unsigned long previousCycleTime = 0;
+unsigned long previousMillis = 0;
 
 //rtc
 RTC_DS3231 rtc;
@@ -34,12 +35,13 @@ void setup() {
   pinMode(ENABLE_PIN, OUTPUT);
   
   digitalWrite(ENABLE_PIN, LOW); // Aktifkan driver
-  digitalWrite(DIR_PIN, HIGH);   // Atur arah putaran (HIGH = CW, LOW = CCW)
+
 }
 
 // Fungsi untuk menggerakkan motor 250 langkah dalam 500 ms
 void moveStepper() {
   unsigned long startTime = millis();
+  digitalWrite(DIR_PIN, HIGH);   // Arah jarum jam
   while (millis() - startTime < cycleTime) {
     for (int i = 0; i < stepsPerCycle; i++) {
       digitalWrite(STEP_PIN, HIGH);
@@ -47,6 +49,23 @@ void moveStepper() {
       digitalWrite(STEP_PIN, LOW);
       delayMicroseconds(100);
     }
+  }
+}
+
+void moveBackStepper() {
+  unsigned long currentMillis = millis();
+  digitalWrite(ENABLE_PIN, LOW);
+  digitalWrite(DIR_PIN, LOW);   // Arah jarum jam
+
+  if (currentMillis - previousMillis >= 800) {
+        previousMillis = currentMillis; // Reset timer
+
+      for (int i = 0; i < 5; i++) { // Loop untuk 10 langkah
+                digitalWrite(STEP_PIN, HIGH);
+                delayMicroseconds(100); // Tunggu 100 µs
+                digitalWrite(STEP_PIN, LOW);
+                delayMicroseconds(100); // Tunggu 500 µs
+      }
   }
 }
 
@@ -69,12 +88,27 @@ void loop() {
     Serial.print(now.second(), DEC);
     Serial.println();
 
-  int startHour = 0, startMinute = 31;  // Waktu mulai motor berjalan
-  int stopHour = 0, stopMinute = 40;    // Waktu berhenti motor
+  int startHour = 1, startMinute = 49;  // Waktu mulai motor berjalan
+  int stopHour = 1, stopMinute = 50;    // Waktu berhenti motor
+
+  int lockHour = 1, lockMinute = 50;  // Waktu motor dikunci
+  int unlockHour = 1, unlockMinute = 53; // Waktu motor tidak terkunci lagi
+  
 
   if (isTimeInRange(now.hour(), now.minute(), startHour, startMinute, stopHour, stopMinute)) {
     motor(); // Jalankan motor jika dalam rentang waktu
   }
+
+  else if (isTimeInRange(now.hour(), now.minute(), lockHour, lockMinute, unlockHour, unlockMinute)) {
+    lockMotor(); // Kunci motor di posisi terakhir
+  } 
+  else if (now.hour() == 2  && now.minute() == 20) {
+    moveBackStepper();
+  } 
+  
+  else if (now.hour() == 2 && now.minute() == 22 ) {
+    moveBackStepper();
+  } 
 
 }
 
@@ -86,3 +120,11 @@ bool isTimeInRange(int currentHour, int currentMinute, int startHour, int startM
   }
   return false; // Waktu sekarang di luar rentang
 }
+
+// Fungsi untuk mengunci motor di posisi terakhir
+void lockMotor() {
+  Serial.println("Motor dikunci di posisi terakhir!");
+  digitalWrite(ENABLE_PIN, LOW); // Mengunci motor
+}
+
+
