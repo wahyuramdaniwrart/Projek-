@@ -1,0 +1,172 @@
+#include <SD.h>
+#include <SPI.h>
+#include <RTClib.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+// Definisi motor
+#define STEP_PIN 4   // Pin STEP untuk TB6600
+#define DIR_PIN 5    // Pin DIR untuk arah putaran
+#define ENABLE_PIN 6 // Pin ENABLE (opsional)
+#define VOLTAGE_SENSOR A0
+#define CURRENT_SENSOR A1
+
+const int chipSelect = 10; 
+const int stepsPerCycle = 10;
+const int cycleTime = 100;
+const unsigned long delayBetweenCycles = 5000;
+
+unsigned long previousCycleTime = 0;
+unsigned long previousMillis = 0;
+
+// RTC
+RTC_DS3231 rtc;
+// Definisi LCD I2C
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// Variabel Sensor
+float voltage = 0.0;
+float current = 0.0;
+const float vRef = 5.0;
+const float currentOffset = 2.5;
+const float sensitivity = 0.185;
+
+void setup() {
+  Serial.begin(115200);
+  lcd.init();
+  lcd.backlight();
+  lcd.setCursor(0, 0);
+  lcd.print("Initializing...");
+
+  // Inisialisasi RTC
+  if (!rtc.begin()) {
+    Serial.println("Couldn't find RTC");
+    lcd.setCursor(0, 1);
+    lcd.print("RTC not found!");
+    while (1);
+  }
+
+  if (rtc.lostPower()) {
+    Serial.println("RTC lost power, setting time");
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  }
+
+  // Inisialisasi SD Card
+  if (!SD.begin(chipSelect)) {
+    Serial.println("SD Init Failed");
+    lcd.setCursor(0, 1);
+    lcd.print("SD Init Failed");
+    return;
+  }
+  Serial.println("SD card initialized.");
+  lcd.setCursor(0, 1);
+  lcd.print("SD Init Success");
+  delay(2000);
+  lcd.clear();
+
+  // Definisi motor
+  pinMode(STEP_PIN, OUTPUT);
+  pinMode(DIR_PIN, OUTPUT);
+  pinMode(ENABLE_PIN, OUTPUT);
+  digitalWrite(ENABLE_PIN, LOW);
+}
+
+void moveStepper() {
+  unsigned long startTime = millis();
+  digitalWrite(DIR_PIN, HIGH);
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Motor Moving...");
+  while (millis() - startTime < cycleTime) {
+    for (int i = 0; i < stepsPerCycle; i++) {
+      digitalWrite(STEP_PIN, HIGH);
+      delayMicroseconds(100);
+      digitalWrite(STEP_PIN, LOW);
+      delayMicroseconds(100);
+    }
+  }
+  lcd.setCursor(0, 1);
+  lcd.print("Motor: Stopped ");
+}
+
+void moveBackStepper() {
+  lcd.setCursor(0, 1);
+  lcd.print("Motor: Reversing");
+  unsigned long currentMillis = millis();
+  digitalWrite(ENABLE_PIN, LOW);
+  digitalWrite(DIR_PIN, LOW);
+  if (currentMillis - previousMillis >= 800) {
+    previousMillis = currentMillis;
+    for (int i = 0; i < 5; i++) {
+      digitalWrite(STEP_PIN, HIGH);
+      delayMicroseconds(100);
+      digitalWrite(STEP_PIN, LOW);
+      delayMicroseconds(100);
+    }
+  }
+  lcd.setCursor(0, 1);
+  lcd.print("Motor: Stopped  ");
+}
+
+void motor() {
+  unsigned long currentTime = millis();
+  if (currentTime - previousCycleTime >= delayBetweenCycles) {
+    previousCycleTime = currentTime;
+    moveStepper();
+  }
+}
+
+void loop() {
+  DateTime now = rtc.now();
+  
+  // Pembacaan Sensor
+  int rawVoltage = analogRead(VOLTAGE_SENSOR);
+  voltage = (rawVoltage * vRef) / 1023.0 * 5.0;
+  float rawCurrent = analogRead(CURRENT_SENSOR) * vRef / 1023.0;
+  current = (rawCurrent - currentOffset) / sensitivity;
+  
+  lcd.setCursor(0, 0);
+  lcd.print("Time: ");
+  lcd.print(now.hour());
+  lcd.print(":");
+  lcd.print(now.minute());
+  lcd.print(":");
+  lcd.print(now.second());
+
+  lcd.setCursor(0, 1);
+  lcd.print("V:");
+  lcd.print(voltage, 1);
+  lcd.print("V I:");
+  lcd.print(current, 2);
+  lcd.print("A");
+
+  int startHour = 22, startMinute = 10;
+  int stopHour = 2, stopMinute = 59;
+  int lockHour = 3, lockMinute = 10;
+  int unlockHour = 3, unlockMinute = 59;
+
+  if (isTimeInRange(now.hour(), now.minute(), startHour, startMinute, stopHour, stopMinute)) {
+    motor();
+  } else if (isTimeInRange(now.hour(), now.minute(), lockHour, lockMinute, unlockHour, unlockMinute)) {
+    lockMotor();
+  } else if (now.hour() == 4  && now.minute() == 00) {
+    moveBackStepper();
+  } else if (now.hour() == 4 && now.minute() == 10 ) {
+    moveBackStepper();
+  }
+}
+
+bool isTimeInRange(int currentHour, int currentMinute, int startHour, int startMinute, int stopHour, int stopMinute) {
+  if ((currentHour > startHour || (currentHour == startHour && currentMinute >= startMinute)) &&
+      (currentHour < stopHour || (currentHour == stopHour && currentMinute < stopMinute))) {
+    return true; // Waktu sekarang berada dalam rentang
+  }
+  return false; // Waktu sekarang di luar rentang
+}
+
+void lockMotor() {
+  Serial.println("Motor locked!");
+  lcd.setCursor(0, 1);
+  lcd.print("Motor: Locked  ");
+  digitalWrite(ENABLE_PIN, LOW);
+}
